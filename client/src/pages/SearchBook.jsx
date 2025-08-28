@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Layout from '../components/Layout.jsx'
-import { api } from '../lib/api.js'
+import { api } from '../lib/api'
 
 export default function SearchBook() {
   const [form, setForm] = useState({
     capacityRequired: '',
     fromPincode: '',
     toPincode: '',
-    startTime: ''
+    startTime: '',
   })
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
@@ -18,16 +18,6 @@ export default function SearchBook() {
   function onChange(e) {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
-  }
-
-  async function fetchBookings() {
-    try {
-      const res = await fetch(api('/api/bookings'))
-      const data = await res.json()
-      if (res.ok) setBookings(data.bookings || data.items || [])
-    } catch (err) {
-      console.error(err)
-    }
   }
 
   async function onSearch(e) {
@@ -44,7 +34,6 @@ export default function SearchBook() {
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Search failed')
       setResult(data)
-      await fetchBookings()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -52,7 +41,7 @@ export default function SearchBook() {
     }
   }
 
-  async function onBook(vehicleId) {
+  async function onBook(vehicleId, vehicleName) {
     setBookingStatus('')
     try {
       const res = await fetch(api('/api/bookings'), {
@@ -63,39 +52,86 @@ export default function SearchBook() {
           customerId: 'demo-user',
           fromPincode: form.fromPincode,
           toPincode: form.toPincode,
-          startTime: new Date(form.startTime).toISOString()
+          startTime: form.startTime
         })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Booking failed')
-      setBookingStatus('Booked!')
+      // Success banner ABOVE the booking list
+      setBookingStatus(`Booked!`)
+      // refresh bookings
       await fetchBookings()
     } catch (err) {
-      setBookingStatus(err.message || 'Booking failed')
+      setBookingStatus(err.message)
     }
   }
 
-  async function cancelBooking(id, vehicleName) {
+  async function cancelBooking(id) {
+    setBookingStatus('')
     try {
       const res = await fetch(api('/api/bookings/' + id), { method: 'DELETE' })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Cancel failed')
-      setBookingStatus(`Cancelled booking for: ${vehicleName || 'Vehicle'}`)
+      setBookingStatus(`Cancelled booking for: ${data?.vehicleName || 'Vehicle'}`)
       await fetchBookings()
     } catch (err) {
-      setBookingStatus(err.message || 'Cancel failed')
+      setBookingStatus(err.message)
+    }
+  }
+
+  async function fetchBookings() {
+    try {
+      const res = await fetch(api('/api/bookings'))
+      const data = await res.json()
+      // handle either {bookings: []} or {items: []}
+      if (res.ok) setBookings(data.bookings || data.items || [])
+    } catch {
+      /* ignore */
     }
   }
 
   useEffect(() => { fetchBookings() }, [])
 
+  // --- Helpers -------------------------------------------------------------
+
+  // Normalize datetime to minute precision for comparison
+  const normalize = (d) => {
+    if (!d) return ''
+    const t = new Date(d)
+    // same minute precision
+    return t.toISOString().slice(0, 16)
+  }
+  const selectedKey = normalize(form.startTime)
+
+  // Build a Set of vehicleIds (or names) that are already booked at the selected time
+  const bookedAtSelected = (() => {
+    const byId = new Set()
+    const byName = new Set()
+    bookings.forEach(b => {
+      const bKey = normalize(b.startTime)
+      if (bKey && bKey === selectedKey) {
+        if (b.vehicleId) byId.add(String(b.vehicleId))
+        if (b.vehicleName) byName.add(String(b.vehicleName))
+      }
+    })
+    return { byId, byName }
+  })()
+
+  const isBookedNow = (vehicle) => {
+    // Prefer vehicleId if available
+    if (vehicle._id && bookedAtSelected.byId.has(String(vehicle._id))) return true
+    if (vehicle.name && bookedAtSelected.byName.has(String(vehicle.name))) return true
+    return false
+  }
+
+  // ------------------------------------------------------------------------
+
   return (
     <Layout>
       <div className="py-2">
         <div className="max-w-4xl mx-auto rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
-          <h2 className="text-2xl font-bold mb-4 text-white">Search & Book</h2>
+          <h2 className="text-2xl font-bold mb-4 text-white">Search &amp; Book</h2>
 
-          {/* 🔎 SEARCH FORM (restored) */}
           <form onSubmit={onSearch} className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm mb-1">Capacity (kg)</label>
@@ -141,68 +177,51 @@ export default function SearchBook() {
               />
             </div>
             <div className="md:col-span-4">
-              <button
-                disabled={loading}
-                className="px-5 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-500"
-              >
+              <button disabled={loading} className="px-5 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-500">
                 {loading ? 'Searching...' : 'Search'}
               </button>
             </div>
           </form>
 
+          {/* Error */}
           {error && <p className="text-red-500 mt-3">{error}</p>}
 
-          {/* 🔁 SEARCH RESULTS */}
-          {result && (
-            <div className="mt-6">
-              <p className="text-gray-400 mb-2">
-                Estimated ride duration: <b>{result.estimatedRideDurationHours} hour(s)</b>
-              </p>
-              {result.available.length === 0 && (
-                <p className="text-gray-500">No vehicles available for that time window.</p>
-              )}
-              <ul className="divide-y divide-slate-800">
-                {result.available.map(v => (
-                  <li key={v._id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-slate-100">{v.name}</div>
-                      <div className="text-sm text-gray-400">
-                        Capacity: {v.capacityKg} kg · Tyres: {v.tyres}
-                      </div>
-                    </div>
-                    <button
-                      className="px-3 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700"
-                      onClick={() => onBook(v._id)}
-                    >
-                      Book
-                    </button>
-                  </li>
-                ))}
-              </ul>
+          {/* SUCCESS / STATUS banner - now ABOVE bookings */}
+          {bookingStatus && (
+            <div className="mt-4 rounded-lg bg-slate-800 text-slate-200 px-4 py-2 border border-slate-700">
+              {bookingStatus}
             </div>
           )}
 
-          {/* 🧾 BOOKINGS LIST */}
-          {bookings.length > 0 && (
-            <div className="mt-8">
-              <h3 className="text-lg font-semibold text-white mb-2">My Bookings</h3>
+          {/* Results list (without the old “Estimated ride duration”) */}
+          {result && (
+            <div className="mt-6">
+              {result.available?.length === 0 && (
+                <p className="text-gray-400">No vehicles available for that time window.</p>
+              )}
               <ul className="divide-y divide-slate-800">
-                {bookings.map(b => {
-                  const vehicleName = b.vehicle?.name || b.vehicleId?.name || 'Vehicle'
+                {result.available?.map(v => {
+                  const disabled = isBookedNow(v)
                   return (
-                    <li key={b._id} className="py-3 flex items-center justify-between">
+                    <li key={v._id || v.name} className="py-3 flex items-center justify-between">
                       <div>
-                        <div className="font-medium text-slate-100">{vehicleName}</div>
+                        <div className="font-medium text-slate-200">{v.name}</div>
                         <div className="text-sm text-gray-400">
-                          {b.fromPincode} → {b.toPincode},{' '}
-                          {new Date(b.startTime).toLocaleString()}
+                          Capacity: {v.capacityKg} kg · Tyres: {v.tyres}
                         </div>
                       </div>
                       <button
-                        onClick={() => cancelBooking(b._id, vehicleName)}
-                        className="px-3 py-1 rounded-lg bg-red-600 text-white hover:bg-red-500"
+                        disabled={disabled}
+                        className={
+                          'px-3 py-2 rounded-lg ' +
+                          (disabled
+                            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                            : 'bg-slate-800 text-white hover:bg-slate-700')
+                        }
+                        onClick={() => onBook(v._id, v.name)}
+                        title={disabled ? 'Already booked for the selected time' : 'Book'}
                       >
-                        Cancel
+                        {disabled ? 'Booked' : 'Book'}
                       </button>
                     </li>
                   )
@@ -211,7 +230,33 @@ export default function SearchBook() {
             </div>
           )}
 
-          {bookingStatus && <p className="mt-3 text-slate-200">{bookingStatus}</p>}
+          {/* My Bookings */}
+          <div className="mt-8">
+            <h3 className="font-semibold text-slate-200 mb-2">My Bookings</h3>
+            {bookings.length === 0 && (
+              <p className="text-gray-400">No bookings yet.</p>
+            )}
+            <ul className="divide-y divide-slate-800">
+              {bookings.map(b => (
+                <li key={b._id} className="py-3 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-slate-200">{b.vehicleName || 'Vehicle'}</div>
+                    <div className="text-sm text-gray-400">
+                      {b.fromPincode} → {b.toPincode},{' '}
+                      {new Date(b.startTime).toLocaleString()}
+                    </div>
+                  </div>
+                  <button
+                    className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500"
+                    onClick={() => cancelBooking(b._id)}
+                  >
+                    Cancel
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
           <a href="/" className="inline-block mt-5 text-sky-400 underline">Back</a>
         </div>
       </div>
