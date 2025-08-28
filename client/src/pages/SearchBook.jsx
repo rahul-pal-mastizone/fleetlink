@@ -24,7 +24,7 @@ export default function SearchBook() {
     try {
       const res = await fetch(api('/api/bookings'))
       const data = await res.json()
-      if (res.ok) setBookings(data.bookings || [])
+      if (res.ok) setBookings(data.bookings || data.items || [])
     } catch (err) {
       console.error(err)
     }
