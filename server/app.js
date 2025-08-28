@@ -1,27 +1,37 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import morgan from 'morgan'
+import { connectDB } from './config/database.js'
 
 import { handleDemo } from './routes/demo.js'
-import { addVehicle, getAvailableVehicles } from './routes/vehicles.js'
+import { addVehicle, getAvailableVehicles, listVehicles, deleteVehicle } from './routes/vehicles.js'
 import { createBooking, deleteBooking, listBookings } from './routes/bookings.js'
 
 const app = express()
+
+// DB
+connectDB().catch(err => console.error(err))
+
+// Middleware
 app.use(cors())
 app.use(express.json())
-app.use(morgan('tiny'))
 
-// health/ping
-app.get('/api/ping', (_req, res) => res.json({ message: process.env.PING_MESSAGE ?? 'ping' }))
+// Health/Ping
+app.get('/api/ping', (_req, res) => {
+  const ping = process.env.PING_MESSAGE ?? 'ping'
+  res.json({ message: ping })
+})
 
-// demo
+// Demo
 app.get('/api/demo', handleDemo)
 
-// vehicles
+// Vehicles
 app.post('/api/vehicles', addVehicle)
 app.get('/api/vehicles/available', getAvailableVehicles)
+app.get('/api/vehicles', listVehicles)           // NEW
+app.delete('/api/vehicles/:id', deleteVehicle)   // NEW
 
-// bookings
+// Bookings
 app.post('/api/bookings', createBooking)
 app.get('/api/bookings', listBookings)
 app.delete('/api/bookings/:id', deleteBooking)
