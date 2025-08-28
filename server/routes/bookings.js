@@ -41,7 +41,17 @@ export const createBooking = async (req, res) => {
       status: 'active'
     })
 
-    res.status(201).json({ message: 'Booking created', booking })
+    // populate so client sees vehicle name right away
+    const saved = await booking.populate('vehicleId', 'name capacityKg tyres')
+
+    res.status(201).json({
+      message: 'Booking created',
+      booking: {
+        ...saved.toObject(),
+        vehicle: saved.vehicleId,
+        vehicleId: saved.vehicleId._id
+      }
+    })
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation error', details: err.errors })
@@ -51,10 +61,20 @@ export const createBooking = async (req, res) => {
   }
 }
 
-// ✅ NEW — list bookings
 export const listBookings = async (_req, res) => {
   try {
-    const items = await Booking.find().sort({ createdAt: -1 }).limit(25).lean()
+    const raw = await Booking.find()
+      .sort({ createdAt: -1 })
+      .limit(25)
+      .populate('vehicleId', 'name capacityKg tyres')
+      .lean()
+
+    const items = raw.map(b => ({
+      ...b,
+      vehicle: b.vehicleId && typeof b.vehicleId === 'object' ? b.vehicleId : null,
+      vehicleId: b.vehicleId && typeof b.vehicleId === 'object' ? b.vehicleId._id : b.vehicleId
+    }))
+
     res.json({ items })
   } catch (err) {
     console.error('Error listing bookings:', err)
