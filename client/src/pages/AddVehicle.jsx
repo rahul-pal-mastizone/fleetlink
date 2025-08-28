@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Layout from '../components/Layout.jsx'
+import { api } from '../lib/api.js'
 
 export default function AddVehicle() {
   const [form, setForm] = useState({ name: '', capacityKg: '', tyres: '' })
@@ -14,7 +15,7 @@ export default function AddVehicle() {
     e.preventDefault()
     setStatus({ loading: true, ok: null, message: '' })
     try {
-      const res = await fetch('/api/vehicles', {
+      const res = await fetch(api('/api/vehicles'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout.jsx'
+import { api } from '../lib/api.js'
 
 export default function SearchBook() {
   const [form, setForm] = useState({
@@ -21,9 +22,9 @@ export default function SearchBook() {
 
   async function fetchBookings() {
     try {
-      const res = await fetch('/api/bookings')
+      const res = await fetch(api('/api/bookings'))
       const data = await res.json()
-      if (res.ok) setBookings(data.items || [])
+      if (res.ok) setBookings(data.bookings || [])
     } catch (err) {
       console.error(err)
     }
@@ -39,7 +40,7 @@ export default function SearchBook() {
         toPincode: form.toPincode || '',
         startTime: form.startTime ? new Date(form.startTime).toISOString() : ''
       })
-      const res = await fetch('/api/vehicles/available?' + params.toString())
+      const res = await fetch(api('/api/vehicles/available?' + params.toString()))
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Search failed')
       setResult(data)
@@ -54,7 +55,7 @@ export default function SearchBook() {
   async function onBook(vehicleId) {
     setBookingStatus('')
     try {
-      const res = await fetch('/api/bookings', {
+      const res = await fetch(api('/api/bookings'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,7 +77,7 @@ export default function SearchBook() {
 
   async function cancelBooking(id, vehicleName) {
     try {
-      const res = await fetch('/api/bookings/' + id, { method: 'DELETE' })
+      const res = await fetch(api('/api/bookings/' + id), { method: 'DELETE' })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Cancel failed')
       setBookingStatus(`Cancelled booking for: ${vehicleName || 'Vehicle'}`)
